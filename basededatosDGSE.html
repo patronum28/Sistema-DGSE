@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema DGSE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        .row-pendiente { background-color: #fefce8; }
+        .row-pendiente:hover { background-color: #fef9c3; }
+        .row-espera { background-color: #ffedd5; }
+        .row-espera:hover { background-color: #fed7aa; }
+        .row-contestado { background-color: #f0fdf4; }
+        .row-contestado:hover { background-color: #dcfce7; }
+        .row-archivado { background-color: #f3f4f6; }
+        .row-archivado:hover { background-color: #e5e7eb; }
+
+        .tab-active {
+            border-bottom: 3px solid #2563eb;
+            color: #2563eb;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12" onload="checkAuth()">
+
+    <!-- PANTALLA DE LOGIN -->
+    <div id="loginScreen" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl text-center border border-slate-700">
+            <img src="HERLADICO_DGSE_ANTIGUO.png" id="loginLogo" class="h-32 mx-auto mb-4 object-contain" alt="Escudo Oficial DGSE" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'><text y=\'50%\' x=\'50%\' text-anchor=\'middle\' font-size=\'14\' fill=\'%231e293b\'>DGSE</text></svg>'">
+            <h2 class="text-xl font-bold text-slate-800">DIRECCIÓN GENERAL DE SEGURIDAD</h2>
+            <p class="text-xs text-slate-500 mb-6 uppercase tracking-wider font-semibold">Sistema de Control</p>
+
+            <form onsubmit="handleLogin(event)" class="space-y-4 text-left">
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Usuario</label>
+                    <input type="text" id="loginUser" required placeholder="Ingrese su usuario..." class="w-full border p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Contraseña</label>
+                    <input type="password" id="loginPass" required placeholder="••••••••" class="w-full border p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <button type="submit" class="w-full bg-blue-700 hover:bg-blue-600 text-white font-bold py-2.5 rounded-lg transition shadow">
+                    Ingresar al Sistema
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- APLICACIÓN PRINCIPAL -->
+    <div id="appScreen" class="hidden">
+        
+        <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30">
+            <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <img src="HERLADICO_DGSE_ANTIGUO.png" class="h-12 w-auto object-contain" alt="Escudo Oficial DGSE" onerror="this.style.display='none'">
+                    <div>
+                        <h1 class="text-lg font-bold tracking-wide leading-tight">DIRECCIÓN GENERAL DE SEGURIDAD</h1>
+                        <p class="text-xs text-blue-300 font-medium">Sistema de Control</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <span id="userInfo" class="text-xs bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-full text-slate-300"></span>
+                    
+                    <button onclick="openAuditModal()" id="btnAuditLog" class="bg-indigo-900 hover:bg-indigo-800 border border-indigo-700 text-indigo-200 font-medium px-3 py-1.5 rounded-lg text-xs transition flex items-center shadow hidden" title="Ver Historial de Modificaciones">
+                        <i class="fa-solid fa-clock-rotate-left mr-1.5 text-indigo-400"></i> Auditoría
+                    </button>
+
+                    <button onclick="openUsersModal()" id="btnGestionUsuarios" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium px-3 py-1.5 rounded-lg text-xs transition flex items-center shadow hidden" title="Configurar Acceso de Personal">
+                        <i class="fa-solid fa-users-gear mr-1.5"></i> Personal
+                    </button>
+                    <button onclick="handleLogout()" class="text-slate-400 hover:text-white text-xs px-2 py-1 ml-2" title="Cerrar Sesión">
+                        <i class="fa-solid fa-right-from-bracket text-base"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto px-4 mt-6">
+
+            <!-- NAVEGACIÓN POR SOLAPAS -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 mb-6">
+                <div class="flex border-b border-slate-200 overflow-x-auto">
+                    <button onclick="switchTab('registroTab')" id="tabBtnRegistro" class="tab-active px-6 py-4 text-sm font-semibold flex items-center gap-2 focus:outline-none transition whitespace-nowrap">
+                        <i class="fa-solid fa-list-check"></i> Registro de Notas
+                    </button>
+                    <button onclick="switchTab('expedientesTab')" id="tabBtnExpedientes" class="px-6 py-4 text-sm font-semibold text-slate-500 flex items-center gap-2 hover:text-slate-700 focus:outline-none transition whitespace-nowrap">
+                        <i class="fa-solid fa-folder-tree text-amber-600"></i> Expedientes (GDE)
+                    </button>
+                    <button onclick="switchTab('viajesTab')" id="tabBtnViajes" class="px-6 py-4 text-sm font-semibold text-slate-500 flex items-center gap-2 hover:text-slate-700 focus:outline-none transition whitespace-nowrap">
+                        <i class="fa-solid fa-plane-departure text-emerald-600"></i> Control de Viajes
+                    </button>
+                    <button onclick="switchTab('estadisticasTab')" id="tabBtnEstadisticas" class="px-6 py-4 text-sm font-semibold text-slate-500 flex items-center gap-2 hover:text-slate-700 focus:outline-none transition whitespace-nowrap">
+                        <i class="fa-solid fa-chart-pie text-indigo-600"></i> Estadísticas DGSE
+                    </button>
+                </div>
+            </div>
+
+            <!-- SOLAPA 1: NOTAS -->
+            <div id="registroTab" class="tab-content">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-6">
+                    <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+                        <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-envelope-open-text text-blue-600"></i> Registro General de Notas
+                        </h2>
+                        <div class="flex items-center gap-3">
+                            <button onclick="openModal()" id="btnNuevaNotaModal" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition shadow flex items-center gap-1.5">
+                                <i class="fa-solid fa-plus"></i> Carga Manual Nota
+                            </button>
+                            <button onclick="toggleAutoUploadSection()" id="btnAutoUpload" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition shadow flex items-center gap-2">
+                                <i class="fa-solid fa-wand-magic-sparkles text-blue-400"></i> Cargar PDF Inteligente
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- CARGA AUTOMÁTICA -->
+                    <div id="autoUploadSection" class="hidden my-6 p-6 bg-slate-50 border-2 border-blue-200 rounded-2xl transition">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-md font-bold text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-file-pdf text-blue-600"></i> Extracción Automática desde PDF (GDE)
+                            </h3>
+                            <button onclick="toggleAutoUploadSection()" class="text-slate-400 hover:text-slate-600 text-sm"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="max-w-2xl mx-auto border-2 border-dashed border-blue-300 bg-white rounded-2xl p-6 text-center hover:border-blue-500 transition cursor-pointer relative" id="dropZone">
+                            <input type="file" id="pdfFileInput" accept="application/pdf" class="absolute inset-0 opacity-0 cursor-pointer" onchange="handleFileSelect(this.files[0])">
+                            <div id="dropZoneContent">
+                                <i class="fa-solid fa-cloud-arrow-up text-3xl text-blue-500 mb-2"></i>
+                                <p class="font-bold text-slate-700 text-sm">Haz clic o arrastra aquí la nota en PDF</p>
+                            </div>
+                        </div>
+                        <div id="pdfStatus" class="hidden max-w-2xl mx-auto mt-4 p-3 rounded-xl text-center text-xs font-semibold"></div>
+                        <div id="parsedResultForm" class="hidden max-w-3xl mx-auto mt-6 border-t pt-4 space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Fecha</label><input type="date" id="autoFecha" class="w-full border p-2 rounded-lg text-sm bg-white font-bold text-blue-900"></div>
+                                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Promotor</label><input type="text" id="autoPromotor" class="w-full border p-2 rounded-lg text-sm bg-white font-bold text-slate-700"></div>
+                            </div>
+                            <div><label class="block text-xs font-semibold text-slate-600 mb-1">Número de Nota</label><input type="text" id="autoNroNota" class="w-full border p-2 rounded-lg text-sm bg-white font-bold text-blue-800"></div>
+                            <div><label class="block text-xs font-semibold text-slate-600 mb-1">Referencia</label><textarea id="autoReferencia" rows="2" class="w-full border p-2.5 rounded-lg text-sm bg-white"></textarea></div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Destinatario</label><input type="text" id="autoAccion" class="w-full border p-2 rounded-lg text-sm bg-white font-bold text-blue-700"></div>
+                                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Tiempo Límite</label><input type="date" id="autoLimite" class="w-full border p-2 rounded-lg text-sm bg-white font-bold text-red-600"></div>
+                            </div>
+                            <div class="flex justify-end gap-3 pt-2">
+                                <button onclick="clearAutoForm()" class="px-3 py-1.5 border rounded-lg text-xs hover:bg-slate-100">Descartar</button>
+                                <button onclick="confirmAutoSave()" class="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-500 shadow"><i class="fa-solid fa-floppy-disk mr-1.5"></i> Confirmar y Guardar Nota</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200"><p class="text-xs text-slate-500 uppercase font-semibold">Total Registros</p><p id="metricTotal" class="text-2xl font-bold text-slate-800 mt-1">0</p></div>
+                        <div class="bg-yellow-50 p-4 rounded-xl shadow-sm border border-yellow-200 cursor-pointer" onclick="filterByMetric('Pendiente')"><p class="text-xs text-yellow-700 uppercase font-semibold">Pendientes</p><p id="metricPendientes" class="text-2xl font-bold text-yellow-800 mt-1">0</p></div>
+                        <div class="bg-orange-50 p-4 rounded-xl shadow-sm border border-orange-200 cursor-pointer" onclick="filterByMetric('En espera')"><p class="text-xs text-orange-700 uppercase font-semibold">En Espera</p><p id="metricEspera" class="text-2xl font-bold text-orange-800 mt-1">0</p></div>
+                        <div class="bg-green-50 p-4 rounded-xl shadow-sm border border-green-200 cursor-pointer" onclick="filterByMetric('Contestado')"><p class="text-xs text-green-700 uppercase font-semibold">Contestados</p><p id="metricContestados" class="text-2xl font-bold text-green-800 mt-1">0</p></div>
+                        <div class="bg-slate-100 p-4 rounded-xl shadow-sm border border-slate-300 cursor-pointer" onclick="filterByMetric('Archivado')"><p class="text-xs text-slate-600 uppercase font-semibold">Archivados</p><p id="metricArchivados" class="text-2xl font-bold text-slate-700 mt-1">0</p></div>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div class="relative w-full md:w-72">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400"></i>
+                            <input type="text" id="searchInput" oninput="renderTable()" placeholder="Buscar nro de nota, referencia..." class="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <select id="filterEstado" onchange="renderTable()" class="border rounded-lg text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="TODOS">Todos los Estados</option>
+                            <option value="Pendiente">Pendientes</option>
+                            <option value="En espera">En espera</option>
+                            <option value="Contestado">Contestados</option>
+                            <option value="Archivado">Archivados</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
+                    <table class="w-full text-left text-xs md:text-sm">
+                        <thead class="bg-slate-800 text-white uppercase text-xs">
+                            <tr>
+                                <th class="p-3">Fecha Firma</th><th class="p-3">Promotor</th><th class="p-3">Nro. de Nota</th><th class="p-3">Referencia / Asunto</th><th class="p-3">Destinatario</th><th class="p-3">Límite</th><th class="p-3">Estado</th><th class="p-3">Observaciones</th><th class="p-3 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody" class="divide-y divide-slate-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SOLAPA 2: EXPEDIENTES (GDE) -->
+            <div id="expedientesTab" class="tab-content hidden">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-folder-tree text-amber-600"></i> Expedientes (GDE)</h2>
+                        <button onclick="openExpedienteModal()" id="btnNuevoExpediente" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition shadow"><i class="fa-solid fa-plus mr-1"></i> Carga Expediente</button>
+                    </div>
+                    <div class="overflow-x-auto border rounded-xl">
+                        <table class="w-full text-left text-xs md:text-sm">
+                            <thead class="bg-slate-800 text-white uppercase text-xs">
+                                <tr><th class="p-3">Fecha</th><th class="p-3">Nro. Expediente</th><th class="p-3">Proveniente</th><th class="p-3">Tema / Trámite</th><th class="p-3">Estado</th><th class="p-3">Pase Actual</th><th class="p-3 text-center">Acciones</th></tr>
+                            </thead>
+                            <tbody id="expTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SOLAPA 3: CONTROL DE VIAJES -->
+            <div id="viajesTab" class="tab-content hidden">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-6">
+                    <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-plane-departure text-emerald-600"></i> Control de Viajes y Comisiones DGSE
+                            </h2>
+                            <p class="text-xs text-slate-500">Planilla de viajes con intervención de la Dirección General de Seguridad.</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button onclick="openViajeModal()" id="btnNuevoViaje" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition shadow flex items-center gap-1.5">
+                                <i class="fa-solid fa-plus"></i> Carga Manual Viaje
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="bg-sky-50 p-4 rounded-xl shadow-sm border border-sky-200">
+                            <p class="text-xs text-sky-800 uppercase font-bold flex items-center gap-1.5"><i class="fa-solid fa-earth-americas text-sky-600"></i> En el Exterior</p>
+                            <p id="viajesMetricExterior" class="text-2xl font-bold text-sky-900 mt-1">0</p>
+                        </div>
+                        <div class="bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-200">
+                            <p class="text-xs text-emerald-800 uppercase font-bold flex items-center gap-1.5"><i class="fa-solid fa-map-location-dot text-emerald-600"></i> Comisión en el País</p>
+                            <p id="viajesMetricPais" class="text-2xl font-bold text-emerald-900 mt-1">0</p>
+                        </div>
+                        <div class="bg-slate-100 p-4 rounded-xl shadow-sm border border-slate-300">
+                            <p class="text-xs text-slate-700 uppercase font-bold flex items-center gap-1.5"><i class="fa-solid fa-circle-check text-slate-600"></i> Finalizados</p>
+                            <p id="viajesMetricCumplidos" class="text-2xl font-bold text-slate-800 mt-1">0</p>
+                        </div>
+                    </div>
+
+                    <div class="relative mb-4">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400"></i>
+                        <input type="text" id="searchViajesInput" oninput="renderViajesTable()" placeholder="Buscar por Grado, Personal, Destino, Evento, Lugar..." class="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <div class="overflow-x-auto border rounded-xl">
+                        <table class="w-full text-left text-xs md:text-sm">
+                            <thead class="bg-slate-800 text-white uppercase text-xs">
+                                <tr>
+                                    <th class="p-3">Personal</th>
+                                    <th class="p-3">Destino</th>
+                                    <th class="p-3">Evento / Misión</th>
+                                    <th class="p-3">Partida</th>
+                                    <th class="p-3">Llegada</th>
+                                    <th class="p-3">Lugar</th>
+                                    <th class="p-3">Estado Comis.</th>
+                                    <th class="p-3">Invita</th>
+                                    <th class="p-3">Calidad</th>
+                                    <th class="p-3">Gastos</th>
+                                    <th class="p-3 text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="viajesTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SOLAPA 4: ESTADÍSTICAS DGSE -->
+            <div id="estadisticasTab" class="tab-content hidden">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-6">
+                    <div class="flex justify-between items-center mb-6 border-b pb-4">
+                        <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-chart-pie text-indigo-600"></i> Panel de Estadísticas y Métricas DGSE</h2>
+                        <button onclick="renderCharts()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs px-3.5 py-2 rounded-lg border border-indigo-200 transition"><i class="fa-solid fa-rotate mr-1"></i> Actualizar</button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-slate-50 p-4 rounded-xl border shadow-sm"><h3 class="text-xs font-bold uppercase text-slate-700 mb-3">Estado de Notas</h3><div class="relative h-64"><canvas id="chartNotasEstado"></canvas></div></div>
+                        <div class="bg-slate-50 p-4 rounded-xl border shadow-sm"><h3 class="text-xs font-bold uppercase text-slate-700 mb-3">Expedientes GDE</h3><div class="relative h-64"><canvas id="chartExpedientesEstado"></canvas></div></div>
+                        <div class="bg-slate-50 p-4 rounded-xl border shadow-sm"><h3 class="text-xs font-bold uppercase text-slate-700 mb-3">Comisiones (Exterior vs País)</h3><div class="relative h-64"><canvas id="chartViajesLugar"></canvas></div></div>
+                        <div class="bg-slate-50 p-4 rounded-xl border shadow-sm"><h3 class="text-xs font-bold uppercase text-slate-700 mb-3">Carga por Promotor</h3><div class="relative h-64"><canvas id="chartPromotores"></canvas></div></div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODAL AUDITORÍA -->
+    <div id="auditModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl w-full max-w-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Auditoría</h2>
+                <button onclick="closeAuditModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <table class="w-full text-left text-xs border"><thead class="bg-slate-800 text-white uppercase text-[10px]"><tr><th class="p-2">Fecha y Hora</th><th class="p-2">Usuario</th><th class="p-2">Acción</th><th class="p-2">Módulo</th><th class="p-2">Detalle</th></tr></thead><tbody id="auditTableBody"></tbody></table>
+            <div class="flex justify-between items-center mt-4">
+                <button onclick="clearAuditLog()" class="bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold px-3 py-1.5 rounded border border-red-200">Limpiar Historial</button>
+                <button onclick="closeAuditModal()" class="px-4 py-2 border rounded-lg text-xs">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL USUARIOS -->
+    <div id="usersModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl w-full max-w-xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <h2 class="text-lg font-bold mb-4 text-slate-800 flex items-center gap-2"><i class="fa-solid fa-users-gear text-blue-600"></i> Configuración de Acceso de Personal</h2>
+            <form onsubmit="saveUser(event)" class="bg-slate-50 p-4 rounded-xl border mb-4 space-y-3">
+                <h3 class="text-xs font-bold uppercase text-slate-700">Agregar o Modificar Usuario</h3>
+                <div class="grid grid-cols-3 gap-2">
+                    <div><label class="block text-[10px] font-semibold text-slate-600 mb-1">Usuario</label><input type="text" id="newUser" placeholder="Usuario" required class="w-full border p-2 rounded text-xs"></div>
+                    <div><label class="block text-[10px] font-semibold text-slate-600 mb-1">Contraseña</label><input type="password" id="newPass" placeholder="Clave" required class="w-full border p-2 rounded text-xs"></div>
+                    <div><label class="block text-[10px] font-semibold text-slate-600 mb-1">Rol</label><select id="newRole" class="w-full border p-2 rounded text-xs bg-white"><option value="Operador">Operador</option><option value="Consulta">Consulta</option><option value="Administrador">Administrador</option></select></div>
+                </div>
+                <div class="flex justify-end pt-1"><button type="submit" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-semibold shadow">Guardar Usuario</button></div>
+            </form>
+            <h3 class="text-xs font-bold uppercase text-slate-700 mb-2">Personal Autorizado</h3>
+            <table class="w-full text-left text-xs border mb-4"><thead class="bg-slate-800 text-white uppercase text-[10px]"><tr><th class="p-2.5">Usuario</th><th class="p-2.5">Rol</th><th class="p-2.5 text-center">Acciones</th></tr></thead><tbody id="usersTableBody"></tbody></table>
+            <div class="flex justify-end"><button onclick="closeUsersModal()" class="px-4 py-2 border rounded-lg text-xs">Cerrar</button></div>
+        </div>
+    </div>
+
+    <!-- MODAL NOTA -->
+    <div id="itemModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <h2 class="text-xl font-bold mb-4 text-slate-800">Nueva Nota</h2>
+            <form onsubmit="saveNota(event)" class="space-y-4">
+                <input type="hidden" id="notaId">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Fecha</label><input type="date" id="fecha" required class="w-full border p-2 rounded-lg text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Promotor</label><input type="text" id="promotor" required class="w-full border p-2 rounded-lg text-sm"></div>
+                </div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Número de Nota</label><input type="text" id="nroNota" required class="w-full border p-2 rounded-lg text-sm font-bold text-blue-800"></div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Referencia</label><textarea id="referencia" required rows="2" class="w-full border p-2 rounded-lg text-sm"></textarea></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Destinatario</label><input type="text" id="accion" class="w-full border p-2 rounded-lg text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Tiempo Límite</label><input type="date" id="limite" class="w-full border p-2 rounded-lg text-sm"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Estado</label><select id="estado" class="w-full border p-2 rounded-lg text-sm bg-white"><option value="Pendiente">🟡 Pendiente</option><option value="En espera">🟠 En espera</option><option value="Contestado">🟢 Contestado</option><option value="Archivado">⚪ Archivado</option></select></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Observaciones</label><input type="text" id="respuesta" class="w-full border p-2 rounded-lg text-sm"></div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4"><button type="button" onclick="closeModal()" class="px-4 py-2 border rounded-lg text-sm">Cancelar</button><button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Guardar Nota</button></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL EXPEDIENTE -->
+    <div id="expModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl w-full max-w-xl p-6 shadow-2xl relative">
+            <h2 class="text-xl font-bold mb-4 text-slate-800">Expediente GDE</h2>
+            <form onsubmit="saveExpediente(event)" class="space-y-4">
+                <input type="hidden" id="expId">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Fecha</label><input type="date" id="expFecha" required class="w-full border p-2 rounded-lg text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Proveniente</label><input type="text" id="expIniciador" required class="w-full border p-2 rounded-lg text-sm"></div>
+                </div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Número de Expediente</label><input type="text" id="expNro" required class="w-full border p-2 rounded-lg text-sm font-bold text-amber-900"></div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Tema / Trámite</label><textarea id="expExtracto" required rows="2" class="w-full border p-2 rounded-lg text-sm"></textarea></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Estado</label><select id="expEstado" class="w-full border p-2 rounded-lg text-sm bg-white"><option value="En revision DGSE">En revisión DGSE</option><option value="Devuelto">Devuelto</option><option value="Finalizado">Finalizado</option></select></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Pase Actual</label><input type="text" id="expPase" class="w-full border p-2 rounded-lg text-sm"></div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-3"><button type="button" onclick="closeExpModal()" class="px-4 py-2 border rounded-lg text-sm">Cancelar</button><button type="submit" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm">Guardar</button></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL VIAJE -->
+    <div id="viajeModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl w-full max-w-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <h2 id="viajeModalTitle" class="text-xl font-bold mb-4 text-slate-800 flex items-center gap-2"><i class="fa-solid fa-plane-circle-check text-emerald-600"></i> Registrar / Editar Comisión o Viaje</h2>
+            <form onsubmit="saveViajeManual(event)" class="space-y-4">
+                <input type="hidden" id="viajeId">
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-xs font-semibold uppercase text-slate-600">Personal en Comisión (Grado, Apellido y Nombre y su Destino específico)</label>
+                        <button type="button" onclick="agregarFilaPersona()" class="text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded font-bold flex items-center gap-1 transition"><i class="fa-solid fa-user-plus"></i> Agregar Persona</button>
+                    </div>
+                    <div id="personasContainer" class="space-y-2 bg-slate-50 p-3 rounded-xl border"></div>
+                </div>
+
+                <!-- SELECTOR ÁMBITO (NACIONAL / INTERNACIONAL) -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Ámbito del Viaje</label>
+                        <select id="viajeAmbito" onchange="toggleAmbitoViaje()" class="w-full border p-2 rounded-lg text-sm bg-white font-bold text-slate-800">
+                            <option value="Nacional">Nacional (Argentina)</option>
+                            <option value="Internacional">Internacional (Exterior)</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Evento / Misión</label><input type="text" id="viajeEvento" required placeholder="Ej. REUNIÓN..." class="w-full border p-2 rounded-lg text-sm"></div>
+                </div>
+
+                <!-- CONTENEDOR DINÁMICO SEGÚN ÁMBITO -->
+                <div id="containerNacional" class="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Provincia</label>
+                        <select id="viajeProvincia" class="w-full border p-2 rounded-lg text-sm bg-white">
+                            <option value="Buenos Aires">Buenos Aires</option>
+                            <option value="Capital Federal (CABA)">Capital Federal (CABA)</option>
+                            <option value="Catamarca">Catamarca</option>
+                            <option value="Chaco">Chaco</option>
+                            <option value="Chubut">Chubut</option>
+                            <option value="Córdoba">Córdoba</option>
+                            <option value="Corrientes">Corrientes</option>
+                            <option value="Entre Ríos">Entre Ríos</option>
+                            <option value="Formosa">Formosa</option>
+                            <option value="Jujuy">Jujuy</option>
+                            <option value="La Pampa">La Pampa</option>
+                            <option value="La Rioja">La Rioja</option>
+                            <option value="Mendoza">Mendoza</option>
+                            <option value="Misiones">Misiones</option>
+                            <option value="Neuquén">Neuquén</option>
+                            <option value="Río Negro">Río Negro</option>
+                            <option value="Salta">Salta</option>
+                            <option value="San Juan">San Juan</option>
+                            <option value="San Luis">San Luis</option>
+                            <option value="Santa Cruz">Santa Cruz</option>
+                            <option value="Santa Fe">Santa Fe</option>
+                            <option value="Santiago del Estero">Santiago del Estero</option>
+                            <option value="Tierra del Fuego">Tierra del Fuego</option>
+                            <option value="Tucumán">Tucumán</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Localidad / Ciudad (Opcional)</label>
+                        <input type="text" id="viajeCiudadNacional" placeholder="Ej. Mar del Plata, Bahía Blanca..." class="w-full border p-2 rounded-lg text-sm bg-white">
+                    </div>
+                </div>
+
+                <div id="containerInternacional" class="hidden grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">País de Destino</label>
+                        <select id="viajePais" class="w-full border p-2 rounded-lg text-sm bg-white">
+                            <option value="Estados Unidos">Estados Unidos</option>
+                            <option value="Honduras">Honduras</option>
+                            <option value="Brasil">Brasil</option>
+                            <option value="Chile">Chile</option>
+                            <option value="Uruguay">Uruguay</option>
+                            <option value="España">España</option>
+                            <option value="México">México</option>
+                            <option value="Colombia">Colombia</option>
+                            <option value="Perú">Perú</option>
+                            <option value="Paraguay">Paraguay</option>
+                            <option value="Bolivia">Bolivia</option>
+                            <option value="Ecuador">Ecuador</option>
+                            <option value="Panamá">Panamá</option>
+                            <option value="Costa Rica">Costa Rica</option>
+                            <option value="Alemania">Alemania</option>
+                            <option value="Francia">Francia</option>
+                            <option value="Reino Unido">Reino Unido</option>
+                            <option value="Italia">Italia</option>
+                            <option value="Otro">Otro País</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Ciudad / Estado Exterior</label>
+                        <input type="text" id="viajeCiudadInternacional" placeholder="Ej. San Pedro Sula, Yorktown..." class="w-full border p-2 rounded-lg text-sm bg-white">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Fecha Partida</label><input type="date" id="viajeSalida" required class="w-full border p-2 rounded-lg text-sm font-semibold"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Fecha Llegada</label><input type="date" id="viajeLlegada" required class="w-full border p-2 rounded-lg text-sm font-semibold"></div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Estado de Comisión</label>
+                        <select id="viajeEstadoComision" class="w-full border p-2 rounded-lg text-sm bg-white font-bold">
+                            <option value="Proximamente">Próximamente</option>
+                            <option value="Continua">Continúa</option>
+                            <option value="Finalizado">Finalizado</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Invita</label><input type="text" id="viajeInvita" placeholder="Ej. RED MAMLA" class="w-full border p-2 rounded-lg text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Calidad</label><input type="text" id="viajeCalidad" placeholder="Ej. PARTICIPANTE" class="w-full border p-2 rounded-lg text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Gastos a Cargo</label><input type="text" id="viajeGastosCargo" placeholder="Ej. PNA" class="w-full border p-2 rounded-lg text-sm"></div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-3">
+                    <button type="button" onclick="closeViajeModal()" class="px-4 py-2 border rounded-lg text-sm">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium">Guardar Viaje</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        let usersDB = JSON.parse(localStorage.getItem('users_db')) || {
+            'admin': { pass: 'admin123', role: 'Administrador' },
+            'operador': { pass: 'operador123', role: 'Operador' },
+            'consulta': { pass: '1234', role: 'Consulta' }
+        };
+
+        let auditLogDB = JSON.parse(localStorage.getItem('audit_log_db')) || [];
+        let currentUser = JSON.parse(sessionStorage.getItem('activeUser')) || null;
+        let notas = JSON.parse(localStorage.getItem('notas_db')) || [];
+        let expedientesDB = JSON.parse(localStorage.getItem('expedientes_db')) || [];
+        let viajesDB = JSON.parse(localStorage.getItem('viajes_db_v2')) || [];
+
+        let autoPdfFileBase64 = null;
+        let currentFileName = '';
+        let globalExtractedText = '';
+
+        let chartNotasInstance = null;
+        let chartExpInstance = null;
+        let chartViajesInstance = null;
+        let chartPromotoresInstance = null;
+
+        function registrarAuditoria(accion, modulo, detalle) {
+            if (!currentUser) return;
+            const fechaHora = new Date().toLocaleString('es-AR');
+            auditLogDB.unshift({ fechaHora, usuario: currentUser.name, rol: currentUser.role, accion, modulo, detalle });
+            if (auditLogDB.length > 100) auditLogDB.pop();
+            localStorage.setItem('audit_log_db', JSON.stringify(auditLogDB));
+        }
+
+        function openAuditModal() {
+            if (currentUser && currentUser.role === 'Administrador') {
+                renderAuditTable();
+                document.getElementById('auditModal').classList.remove('hidden');
+            }
+        }
+        function closeAuditModal() { document.getElementById('auditModal').classList.add('hidden'); }
+
+        function renderAuditTable() {
+            const body = document.getElementById('auditTableBody');
+            body.innerHTML = '';
+            if (auditLogDB.length === 0) {
+                body.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">No hay registros de auditoría aún.</td></tr>`;
+                return;
+            }
+            auditLogDB.forEach(log => {
+                body.innerHTML += `
+                    <tr class="border-b hover:bg-slate-50">
+                        <td class="p-2.5 text-slate-600">${log.fechaHora}</td>
+                        <td class="p-2.5 font-bold">${log.usuario} (${log.rol})</td>
+                        <td class="p-2.5">${log.accion}</td>
+                        <td class="p-2.5 font-semibold">${log.modulo}</td>
+                        <td class="p-2.5 text-slate-600">${log.detalle}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function clearAuditLog() {
+            if (confirm('¿Desea limpiar el historial de auditoría?')) {
+                auditLogDB = [];
+                localStorage.removeItem('audit_log_db');
+                renderAuditTable();
+            }
+        }
+
+        function openUsersModal() {
+            if (currentUser && currentUser.role === 'Administrador') {
+                renderUsersTable();
+                document.getElementById('usersModal').classList.remove('hidden');
+            }
+        }
+        function closeUsersModal() { document.getElementById('usersModal').classList.add('hidden'); }
+
+        function renderUsersTable() {
+            const body = document.getElementById('usersTableBody');
+            body.innerHTML = '';
+            for (let u in usersDB) {
+                body.innerHTML += `
+                    <tr class="border-b">
+                        <td class="p-2.5 font-bold">${u.toUpperCase()}</td>
+                        <td class="p-2.5"><span class="bg-slate-100 border px-2 py-0.5 rounded text-[11px]">${usersDB[u].role}</span></td>
+                        <td class="p-2.5 text-center"><button onclick="deleteUser('${u}')" class="text-red-600 hover:text-red-800"><i class="fa-solid fa-user-xmark"></i></button></td>
+                    </tr>
+                `;
+            }
+        }
+
+        function saveUser(e) {
+            e.preventDefault();
+            if (currentUser && currentUser.role !== 'Administrador') return;
+            const u = document.getElementById('newUser').value.toLowerCase().trim();
+            const p = document.getElementById('newPass').value;
+            const r = document.getElementById('newRole').value;
+            usersDB[u] = { pass: p, role: r };
+            localStorage.setItem('users_db', JSON.stringify(usersDB));
+            document.getElementById('newUser').value = '';
+            document.getElementById('newPass').value = '';
+            renderUsersTable();
+        }
+
+        function deleteUser(u) {
+            if (currentUser && currentUser.role !== 'Administrador') return;
+            if (Object.keys(usersDB).length <= 1) { alert('Debe quedar al menos un usuario.'); return; }
+            if (confirm(`¿Eliminar usuario ${u.toUpperCase()}?`)) {
+                delete usersDB[u];
+                localStorage.setItem('users_db', JSON.stringify(usersDB));
+                renderUsersTable();
+            }
+        }
+
+        function formatFechaLatina(fechaStr) {
+            if (!fechaStr) return '-';
+            const partes = fechaStr.split('-');
+            return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : fechaStr;
+        }
+
+        function toggleAutoUploadSection() { document.getElementById('autoUploadSection').classList.toggle('hidden'); }
+
+        function checkAuth() {
+            if (currentUser) {
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('appScreen').classList.remove('hidden');
+                document.getElementById('userInfo').innerHTML = `<i class="fa-solid fa-user-shield mr-1.5 text-blue-400"></i> ${currentUser.name} (${currentUser.role})`;
+
+                const esConsulta = (currentUser.role === 'Consulta');
+                document.getElementById('btnNuevaNotaModal').classList.toggle('hidden', esConsulta);
+                document.getElementById('btnAutoUpload').classList.toggle('hidden', esConsulta);
+                document.getElementById('btnNuevoExpediente').classList.toggle('hidden', esConsulta);
+                document.getElementById('btnNuevoViaje').classList.toggle('hidden', esConsulta);
+
+                if (currentUser.role === 'Administrador') {
+                    document.getElementById('btnGestionUsuarios').classList.remove('hidden');
+                    document.getElementById('btnAuditLog').classList.remove('hidden');
+                } else {
+                    document.getElementById('btnGestionUsuarios').classList.add('hidden');
+                    document.getElementById('btnAuditLog').classList.add('hidden');
+                }
+
+                renderTable();
+                renderExpedientesTable();
+                renderViajesTable();
+            } else {
+                document.getElementById('loginScreen').classList.remove('hidden');
+                document.getElementById('appScreen').classList.add('hidden');
+            }
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const u = document.getElementById('loginUser').value.toLowerCase().trim();
+            const p = document.getElementById('loginPass').value;
+            if (usersDB[u] && usersDB[u].pass === p) {
+                currentUser = { name: u.toUpperCase(), role: usersDB[u].role };
+                sessionStorage.setItem('activeUser', JSON.stringify(currentUser));
+                checkAuth();
+            } else { alert('Usuario o contraseña incorrectos.'); }
+        }
+
+        function handleLogout() {
+            sessionStorage.removeItem('activeUser');
+            currentUser = null;
+            checkAuth();
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            document.getElementById('tabBtnRegistro').className = tabId === 'registroTab' ? 'tab-active px-6 py-4 text-sm font-semibold flex items-center gap-2 focus:outline-none transition whitespace-nowrap' : 'px-6 py-4 text-sm font-semibold text-slate-500 flex items-center gap-2 hover:text-slate-700 focus:outline-none transition whitespace-nowrap';
+            document.getElementById('tabBtnExpedientes').className = tabId === 'expedientesTab' ? 'tab-active px-6 py-4 text-sm font-semibold flex items-center gap-2 focus:outline-none transition whitespace-nowrap' : 'px-6 py-4 text-sm font-semibold text-slate-500 flex items-center gap-2 hover:text-slate-700 focus:outline-none transition whitespace-nowrap';
+            document.getElementById('tabBtnViajes').className = tabId === 'viajesTab' ? 'tab-active px-6 py-4 text-sm font-semibold flex items-center gap-2 focus:outline-none transition whitespace-nowrap' : 'px-6 py-4 text-sm font-semibold text-slate-500 flex items-center gap-2 hover:text-slate-700 focus:outline-none transition whitespace-nowrap';
+            document.getElementById('tabBtnEstadisticas').className = tabId === 'estadisticasTab' ? 'tab-active px-6 py-4 text-sm font-semibold flex items-center gap-2 focus:outline-none transition whitespace-nowrap' : 'px-6 py-4 text-sm font-semibold text-slate-500 flex items-center gap-2 hover:text-slate-700 focus:outline-none transition whitespace-nowrap';
+            if (tabId === 'estadisticasTab') renderCharts();
+        }
+
+        function renderCharts() {
+            notas = JSON.parse(localStorage.getItem('notas_db')) || [];
+            expedientesDB = JSON.parse(localStorage.getItem('expedientes_db')) || [];
+            viajesDB = JSON.parse(localStorage.getItem('viajes_db_v2')) || [];
+
+            const pend = notas.filter(n => n.estado === 'Pendiente').length;
+            const espera = notas.filter(n => n.estado === 'En espera').length;
+            const contestado = notas.filter(n => n.estado === 'Contestado').length;
+            const archivado = notas.filter(n => n.estado === 'Archivado').length;
+
+            if (chartNotasInstance) chartNotasInstance.destroy();
+            chartNotasInstance = new Chart(document.getElementById('chartNotasEstado'), {
+                type: 'doughnut',
+                data: { labels: ['Pendientes', 'En espera', 'Contestados', 'Archivados'], datasets: [{ data: [pend, espera, contestado, archivado], backgroundColor: ['#eab308', '#f97316', '#22c55e', '#64748b'] }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            let expRev = expedientesDB.filter(e => e.estado === 'En revision DGSE').length;
+            let expDev = expedientesDB.filter(e => e.estado === 'Devuelto').length;
+            let expFin = expedientesDB.filter(e => e.estado === 'Finalizado').length;
+
+            if (chartExpInstance) chartExpInstance.destroy();
+            chartExpInstance = new Chart(document.getElementById('chartExpedientesEstado'), {
+                type: 'bar',
+                data: { labels: ['En Revisión', 'Devueltos', 'Finalizados'], datasets: [{ data: [expRev, expDev, expFin], backgroundColor: ['#3b82f6', '#ef4444', '#10b981'] }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            let ext = 0, pais = 0;
+            viajesDB.forEach(v => {
+                if (v.ambito === 'Internacional') { ext++; } else { pais++; }
+            });
+
+            if (chartViajesInstance) chartViajesInstance.destroy();
+            chartViajesInstance = new Chart(document.getElementById('chartViajesLugar'), {
+                type: 'pie',
+                data: { labels: ['Comisión en el País (Nacional)', 'En el Exterior (Internacional)'], datasets: [{ data: [pais, ext], backgroundColor: ['#10b981', '#0ea5e9'] }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            let promotorCounts = {};
+            notas.forEach(n => { let p = n.promotor ? n.promotor.trim().toUpperCase() : 'S/D'; promotorCounts[p] = (promotorCounts[p] || 0) + 1; });
+            if (chartPromotoresInstance) chartPromotoresInstance.destroy();
+            chartPromotoresInstance = new Chart(document.getElementById('chartPromotores'), {
+                type: 'bar',
+                data: { labels: Object.keys(promotorCounts).length > 0 ? Object.keys(promotorCounts) : ['Sin datos'], datasets: [{ data: Object.values(promotorCounts).length > 0 ? Object.values(promotorCounts) : [0], backgroundColor: '#6366f1' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function handleFileSelect(file) {
+            if (!file || file.type !== 'application/pdf') return;
+            currentFileName = file.name;
+            processPDF(file);
+        }
+
+        async function processPDF(file) {
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                autoPdfFileBase64 = e.target.result;
+                const typedarray = new Uint8Array(e.target.result);
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                let text = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += ' ' + content.items.map(item => item.str).join(' ');
+                }
+                document.getElementById('autoFecha').value = new Date().toISOString().split('T')[0];
+                document.getElementById('autoPromotor').value = currentFileName.match(/-([A-Z0-9]+)(?:#|$)/)?.[1] || 'S/D';
+                document.getElementById('autoNroNota').value = currentFileName.replace(/\.[^/.]+$/, "").toUpperCase();
+                document.getElementById('autoReferencia').value = text.substring(0, 150);
+                document.getElementById('parsedResultForm').classList.remove('hidden');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function confirmAutoSave() {
+            notas.unshift({
+                id: Date.now(),
+                fecha: document.getElementById('autoFecha').value,
+                promotor: document.getElementById('autoPromotor').value || 'S/D',
+                nroNota: document.getElementById('autoNroNota').value || 'S/D',
+                referencia: document.getElementById('autoReferencia').value,
+                accion: document.getElementById('autoAccion').value || 'DGSE',
+                limite: document.getElementById('autoLimite').value || '',
+                estado: 'Pendiente',
+                respuesta: '',
+                adjuntoNota: autoPdfFileBase64
+            });
+            localStorage.setItem('notas_db', JSON.stringify(notas));
+            registrarAuditoria('Creó', 'Notas', `Nota Nro: ${document.getElementById('autoNroNota').value}`);
+            clearAutoForm();
+            toggleAutoUploadSection();
+            renderTable();
+        }
+
+        function clearAutoForm() { document.getElementById('parsedResultForm').classList.add('hidden'); autoPdfFileBase64 = null; }
+        function filterByMetric(est) { document.getElementById('filterEstado').value = est; renderTable(); }
+
+        function renderTable() {
+            const body = document.getElementById('tableBody');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const filterEstado = document.getElementById('filterEstado').value;
+            body.innerHTML = '';
+            let filtered = notas.filter(n => ((n.nroNota && n.nroNota.toLowerCase().includes(search)) || (n.referencia && n.referencia.toLowerCase().includes(search))) && (filterEstado === 'TODOS' || n.estado === filterEstado));
+
+            document.getElementById('metricTotal').innerText = notas.length;
+            document.getElementById('metricPendientes').innerText = notas.filter(n => n.estado === 'Pendiente').length;
+            document.getElementById('metricEspera').innerText = notas.filter(n => n.estado === 'En espera').length;
+            document.getElementById('metricContestados').innerText = notas.filter(n => n.estado === 'Contestado').length;
+            document.getElementById('metricArchivados').innerText = notas.filter(n => n.estado === 'Archivado').length;
+
+            filtered.forEach(n => {
+                let accionesHTML = '-';
+                if (currentUser && currentUser.role !== 'Consulta') {
+                    accionesHTML = `<button onclick="deleteNota(${n.id})" class="text-red-600 hover:text-red-800"><i class="fa-solid fa-trash"></i></button>`;
+                }
+                body.innerHTML += `
+                    <tr class="border-b hover:bg-slate-50">
+                        <td class="p-3 font-semibold">${formatFechaLatina(n.fecha)}</td>
+                        <td class="p-3 font-semibold">${n.promotor}</td>
+                        <td class="p-3 font-mono font-bold text-blue-900">${n.nroNota}</td>
+                        <td class="p-3">${n.referencia}</td>
+                        <td class="p-3 font-bold">${n.accion || '-'}</td>
+                        <td class="p-3">${formatFechaLatina(n.limite)}</td>
+                        <td class="p-3"><span class="px-2 py-1 rounded text-xs font-bold border">${n.estado}</span></td>
+                        <td class="p-3">${n.respuesta || '-'}</td>
+                        <td class="p-3 text-center">${accionesHTML}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function openModal() { document.getElementById('fecha').value = new Date().toISOString().split('T')[0]; document.getElementById('itemModal').classList.remove('hidden'); }
+        function closeModal() { document.getElementById('itemModal').classList.add('hidden'); }
+        function saveNota(e) {
+            e.preventDefault();
+            notas.unshift({
+                id: Date.now(), fecha: document.getElementById('fecha').value, promotor: document.getElementById('promotor').value,
+                nroNota: document.getElementById('nroNota').value, referencia: document.getElementById('referencia').value,
+                accion: document.getElementById('accion').value, limite: document.getElementById('limite').value,
+                estado: document.getElementById('estado').value, respuesta: document.getElementById('respuesta').value
+            });
+            localStorage.setItem('notas_db', JSON.stringify(notas));
+            registrarAuditoria('Creó', 'Notas', `Nota Nro: ${document.getElementById('nroNota').value}`);
+            closeModal(); renderTable();
+        }
+        function deleteNota(id) {
+            const notaDel = notas.find(n => n.id === id);
+            notas = notas.filter(n => n.id !== id);
+            localStorage.setItem('notas_db', JSON.stringify(notas));
+            if (notaDel) registrarAuditoria('Eliminó', 'Notas', `Nota Nro: ${notaDel.nroNota}`);
+            renderTable();
+        }
+
+        function openExpedienteModal() { document.getElementById('expModal').classList.remove('hidden'); }
+        function closeExpModal() { document.getElementById('expModal').classList.add('hidden'); }
+        function saveExpediente(e) {
+            e.preventDefault();
+            expedientesDB.unshift({
+                id: Date.now(), fecha: document.getElementById('expFecha').value, iniciador: document.getElementById('expIniciador').value,
+                nroExpediente: document.getElementById('expNro').value, extracto: document.getElementById('expExtracto').value,
+                estado: document.getElementById('expEstado').value, pase: document.getElementById('expPase').value
+            });
+            localStorage.setItem('expedientes_db', JSON.stringify(expedientesDB));
+            registrarAuditoria('Creó', 'Expedientes', `Expediente: ${document.getElementById('expNro').value}`);
+            closeExpModal(); renderExpedientesTable();
+        }
+        function renderExpedientesTable() {
+            const body = document.getElementById('expTableBody'); body.innerHTML = '';
+            expedientesDB.forEach(e => {
+                let accionesHTML = '-';
+                if (currentUser && currentUser.role !== 'Consulta') {
+                    accionesHTML = `<button onclick="deleteExp(${e.id})" class="text-red-600"><i class="fa-solid fa-trash"></i></button>`;
+                }
+                body.innerHTML += `
+                    <tr class="border-b hover:bg-slate-50">
+                        <td class="p-3">${formatFechaLatina(e.fecha)}</td><td class="p-3 font-mono font-bold text-amber-900">${e.nroExpediente}</td>
+                        <td class="p-3">${e.iniciador}</td><td class="p-3">${e.extracto}</td>
+                        <td class="p-3"><span class="px-2 py-1 rounded text-xs font-bold border">${e.estado}</span></td>
+                        <td class="p-3 font-bold">${e.pase}</td>
+                        <td class="p-3 text-center">${accionesHTML}</td>
+                    </tr>
+                `;
+            });
+        }
+        function deleteExp(id) {
+            const expDel = expedientesDB.find(e => e.id === id);
+            expedientesDB = expedientesDB.filter(e => e.id !== id);
+            localStorage.setItem('expedientes_db', JSON.stringify(expedientesDB));
+            if (expDel) registrarAuditoria('Eliminó', 'Expedientes', `Expediente: ${expDel.nroExpediente}`);
+            renderExpedientesTable();
+        }
+
+        function agregarFilaPersona(grado = '', nombre = '', destino = '') {
+            const container = document.getElementById('personasContainer');
+            const rowId = 'persona_row_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            const div = document.createElement('div');
+            div.id = rowId;
+            div.className = 'flex items-center gap-2 bg-white p-2 rounded-lg border';
+            div.innerHTML = `
+                <div class="w-1/4"><input type="text" placeholder="Grado" value="${grado}" class="input-grado w-full border p-1.5 rounded text-xs font-semibold bg-slate-50" required></div>
+                <div class="w-2/4"><input type="text" placeholder="Apellido y Nombre" value="${nombre}" class="input-nombre w-full border p-1.5 rounded text-xs font-bold text-blue-900 bg-slate-50" required></div>
+                <div class="w-1/4 flex items-center gap-1"><input type="text" placeholder="Destino específico" value="${destino}" class="input-destino w-full border p-1.5 rounded text-xs font-semibold text-emerald-800 bg-slate-50" required><button type="button" onclick="document.getElementById('${rowId}').remove()" class="text-red-500 px-1"><i class="fa-solid fa-trash"></i></button></div>
+            `;
+            container.appendChild(div);
+        }
+
+        function toggleAmbitoViaje() {
+            const ambito = document.getElementById('viajeAmbito').value;
+            const containerNac = document.getElementById('containerNacional');
+            const containerInt = document.getElementById('containerInternacional');
+            if (ambito === 'Nacional') {
+                containerNac.classList.remove('hidden');
+                containerInt.classList.add('hidden');
+            } else {
+                containerNac.classList.add('hidden');
+                containerInt.classList.remove('hidden');
+            }
+        }
+
+        function openViajeModal() {
+            document.getElementById('viajeId').value = '';
+            document.getElementById('personasContainer').innerHTML = '';
+            agregarFilaPersona();
+            document.getElementById('viajeAmbito').value = 'Nacional';
+            toggleAmbitoViaje();
+            document.getElementById('viajeProvincia').value = 'Buenos Aires';
+            document.getElementById('viajeCiudadNacional').value = '';
+            document.getElementById('viajePais').value = 'Estados Unidos';
+            document.getElementById('viajeCiudadInternacional').value = '';
+            document.getElementById('viajeEvento').value = '';
+            document.getElementById('viajeSalida').value = new Date().toISOString().split('T')[0];
+            document.getElementById('viajeLlegada').value = new Date().toISOString().split('T')[0];
+            document.getElementById('viajeEstadoComision').value = 'Proximamente';
+            document.getElementById('viajeInvita').value = '';
+            document.getElementById('viajeCalidad').value = '';
+            document.getElementById('viajeGastosCargo').value = '';
+            document.getElementById('viajeModalTitle').innerHTML = '<i class="fa-solid fa-plane-circle-check text-emerald-600"></i> Registrar Comisión / Viaje';
+            document.getElementById('viajeModal').classList.remove('hidden');
+        }
+
+        function closeViajeModal() { document.getElementById('viajeModal').classList.add('hidden'); }
+
+        function saveViajeManual(e) {
+            e.preventDefault();
+            const id = document.getElementById('viajeId').value;
+            let personas = [];
+            document.querySelectorAll('#personasContainer > div').forEach(fila => {
+                const grado = fila.querySelector('.input-grado').value.trim();
+                const nombre = fila.querySelector('.input-nombre').value.trim();
+                const destino = fila.querySelector('.input-destino').value.trim();
+                if (grado || nombre || destino) personas.push({ grado, nombre, destino });
+            });
+
+            if (personas.length === 0) { alert('Ingrese al menos una persona.'); return; }
+
+            const ambito = document.getElementById('viajeAmbito').value;
+            let lugarFinal = '';
+            if (ambito === 'Nacional') {
+                const prov = document.getElementById('viajeProvincia').value;
+                const ciudadNac = document.getElementById('viajeCiudadNacional').value.trim();
+                lugarFinal = ciudadNac ? `${ciudadNac}, ${prov}, Argentina` : `${prov}, Argentina`;
+            } else {
+                const pais = document.getElementById('viajePais').value;
+                const ciudadInt = document.getElementById('viajeCiudadInternacional').value.trim();
+                lugarFinal = ciudadInt ? `${ciudadInt}, ${pais}` : pais;
+            }
+
+            const viajeData = {
+                id: id ? id : Date.now(),
+                personas,
+                ambito,
+                lugar: lugarFinal,
+                evento: document.getElementById('viajeEvento').value,
+                salida: document.getElementById('viajeSalida').value,
+                llegada: document.getElementById('viajeLlegada').value,
+                estadoComision: document.getElementById('viajeEstadoComision').value,
+                invita: document.getElementById('viajeInvita').value,
+                calidad: document.getElementById('viajeCalidad').value,
+                gastosCargo: document.getElementById('viajeGastosCargo').value
+            };
+
+            if (id) {
+                const idx = viajesDB.findIndex(v => v.id == id);
+                viajesDB[idx] = viajeData;
+                registrarAuditoria('Modificó', 'Viajes', `Evento: ${viajeData.evento}`);
+            } else {
+                viajesDB.unshift(viajeData);
+                registrarAuditoria('Creó', 'Viajes', `Evento: ${viajeData.evento}`);
+            }
+
+            localStorage.setItem('viajes_db_v2', JSON.stringify(viajesDB));
+            closeViajeModal();
+            renderViajesTable();
+        }
+
+        function editViaje(id) {
+            const v = viajesDB.find(item => item.id == id);
+            if (!v) return;
+
+            document.getElementById('viajeId').value = v.id;
+            document.getElementById('personasContainer').innerHTML = '';
+            
+            if (v.personas && v.personas.length > 0) {
+                v.personas.forEach(p => { agregarFilaPersona(p.grado || 'OP', p.nombre || p.apellidoNombre || '', p.destino || ''); });
+            } else if (v.personal) {
+                agregarFilaPersona('OP', v.personal, v.lugar || '');
+            } else {
+                agregarFilaPersona();
+            }
+
+            document.getElementById('viajeAmbito').value = v.ambito || (v.lugar && v.lugar.includes('Argentina') ? 'Nacional' : 'Internacional');
+            toggleAmbitoViaje();
+
+            if (document.getElementById('viajeAmbito').value === 'Nacional') {
+                document.getElementById('viajeProvincia').value = 'Buenos Aires'; // default o parseo simple
+                document.getElementById('viajeCiudadNacional').value = v.lugar || '';
+            } else {
+                document.getElementById('viajePais').value = 'Estados Unidos';
+                document.getElementById('viajeCiudadInternacional').value = v.lugar || '';
+            }
+
+            document.getElementById('viajeEvento').value = v.evento || '';
+            document.getElementById('viajeSalida').value = v.salida || '';
+            document.getElementById('viajeLlegada').value = v.llegada || '';
+            document.getElementById('viajeEstadoComision').value = v.estadoComision || 'Proximamente';
+            document.getElementById('viajeInvita').value = v.invita || '';
+            document.getElementById('viajeCalidad').value = v.calidad || '';
+            document.getElementById('viajeGastosCargo').value = v.gastosCargo || '';
+
+            document.getElementById('viajeModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-emerald-600"></i> Editar Comisión / Viaje';
+            document.getElementById('viajeModal').classList.remove('hidden');
+        }
+
+        function deleteViaje(id) {
+            const viajeDel = viajesDB.find(v => v.id === id);
+            if (confirm('¿Eliminar este registro de viaje?')) {
+                viajesDB = viajesDB.filter(v => v.id !== id);
+                localStorage.setItem('viajes_db_v2', JSON.stringify(viajesDB));
+                if (viajeDel) registrarAuditoria('Eliminó', 'Viajes', `Evento: ${viajeDel.evento}`);
+                renderViajesTable();
+            }
+        }
+
+        function renderViajesTable() {
+            const body = document.getElementById('viajesTableBody');
+            const search = document.getElementById('searchViajesInput').value.toLowerCase();
+            body.innerHTML = '';
+
+            let exterior = 0, pais = 0, finalizadosCount = 0;
+            const hoy = new Date();
+
+            viajesDB.forEach(v => {
+                if (v.ambito === 'Internacional') { exterior++; } else { pais++; }
+                if (v.estadoComision === 'Finalizado' || (v.llegada && new Date(v.llegada + 'T00:00:00') < hoy)) finalizadosCount++;
+            });
+
+            document.getElementById('viajesMetricExterior').innerText = exterior;
+            document.getElementById('viajesMetricPais').innerText = pais;
+            document.getElementById('viajesMetricCumplidos').innerText = finalizadosCount;
+
+            if (viajesDB.length === 0) {
+                body.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-slate-400">No hay registros de viajes cargados.</td></tr>`;
+                return;
+            }
+
+            let filtered = viajesDB.filter(v => {
+                let personasStr = v.personas ? v.personas.map(p => `${p.grado || ''} ${p.nombre || p.apellidoNombre || ''} ${p.destino || ''}`).join(' ') : (v.personal || '');
+                return personasStr.toLowerCase().includes(search) || (v.evento && v.evento.toLowerCase().includes(search)) || (v.lugar && v.lugar.toLowerCase().includes(search));
+            });
+
+            filtered.forEach(v => {
+                let personasHTML = '<div class="flex flex-col space-y-1">';
+                let destinosHTML = '<div class="flex flex-col space-y-1">';
+                
+                if (v.personas && v.personas.length > 0) {
+                    v.personas.forEach(p => {
+                        personasHTML += `<span class="font-bold text-slate-800">${p.grado || 'OP'} <span class="font-normal text-slate-600">${p.nombre || p.apellidoNombre || 'Personal'}</span></span>`;
+                        destinosHTML += `<span class="font-semibold text-emerald-800">${p.destino || v.lugar || '-'}</span>`;
+                    });
+                } else if (v.personal) {
+                    personasHTML += `<span class="font-bold text-slate-800">OP <span class="font-normal text-slate-600">${v.personal}</span></span>`;
+                    destinosHTML += `<span class="font-semibold text-emerald-800">${v.lugar || '-'}</span>`;
+                } else {
+                    personasHTML += '-'; destinosHTML += '-';
+                }
+                personasHTML += '</div>'; destinosHTML += '</div>';
+
+                let estadoBadge = '<span class="px-2 py-1 rounded text-[11px] font-bold bg-slate-100 text-slate-700">Próximamente</span>';
+                let estVal = v.estadoComision;
+                if (!estVal && v.llegada) {
+                    let llegadaDate = new Date(v.llegada + 'T00:00:00');
+                    let salidaDate = new Date(v.salida + 'T00:00:00');
+                    if (llegadaDate < hoy) estVal = 'Finalizado';
+                    else if (salidaDate <= hoy && llegadaDate >= hoy) estVal = 'Continua';
+                    else estVal = 'Proximamente';
+                }
+
+                if (estVal === 'Finalizado') estadoBadge = '<span class="px-2 py-1 rounded text-[11px] font-bold bg-green-100 text-green-800">🟢 Finalizado</span>';
+                else if (estVal === 'Continua') estadoBadge = '<span class="px-2 py-1 rounded text-[11px] font-bold bg-blue-100 text-blue-800">🔵 Continúa</span>';
+                else if (estVal === 'Proximamente') estadoBadge = '<span class="px-2 py-1 rounded text-[11px] font-bold bg-amber-100 text-amber-800">🟠 Próximamente</span>';
+
+                let accionesHTML = '-';
+                if (currentUser && currentUser.role !== 'Consulta') {
+                    accionesHTML = `
+                        <button onclick="editViaje(${v.id})" class="text-blue-600 hover:text-blue-800 px-1" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
+                        <button onclick="deleteViaje(${v.id})" class="text-red-600 hover:text-red-800 px-1" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                    `;
+                }
+
+                body.innerHTML += `
+                    <tr class="border-b hover:bg-slate-50 transition">
+                        <td class="p-3">${personasHTML}</td>
+                        <td class="p-3">${destinosHTML}</td>
+                        <td class="p-3 font-medium">${v.evento || '-'}</td>
+                        <td class="p-3 whitespace-nowrap text-slate-700">${formatFechaLatina(v.salida)}</td>
+                        <td class="p-3 whitespace-nowrap text-slate-700">${formatFechaLatina(v.llegada)}</td>
+                        <td class="p-3 text-slate-600">${v.lugar || '-'}</td>
+                        <td class="p-3">${estadoBadge}</td>
+                        <td class="p-3 text-slate-600">${v.invita || '-'}</td>
+                        <td class="p-3 font-semibold">${v.calidad || '-'}</td>
+                        <td class="p-3 text-slate-600">${v.gastosCargo || '-'}</td>
+                        <td class="p-3 text-center">${accionesHTML}</td>
+                    </tr>
+                `;
+            });
+        }
+    </script>
+</body>
+</html>
